@@ -1,0 +1,246 @@
+#!/bin/sh
+
+#----------------------------------------------------------------#
+# terraform install
+#----------------------------------------------------------------#
+#
+#  terraform (c) copyright 2004 flame (www.bluepanel.org)
+#  modifications (c) copyright 2005 
+#  		Internet Vision Technologies <www.ivt.com.au>
+#
+#
+#  originally based on debian-installer-startup (ubuntu 4.10)
+#
+#----------------------------------------------------------------#
+#
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License (version 2) as 
+#  published by the Free Software Foundation.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Library General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+#
+#----------------------------------------------------------------#
+#  created  : 25-02-2005
+#  modified : 31-03-2005
+#----------------------------------------------------------------#
+
+# run the Terraform install system
+#
+# usage : install terraform [ -i ipaddress ] [ -n netmask ] [ -g gateway ] [ -p password ] [ -r raid ] [ -h home ]
+# ipaddress defaults to 192.168.0.254
+# netmask defaults to 255.255.255.0
+# gateway defaults to 192.168.0.1
+# password defaults to 'password'
+# raid defaults to 1
+# home defaults to 'terraform'
+#
+
+#----------------------------------------------------------------#
+# installer name
+#----------------------------------------------------------------#
+
+INSTALLER="terraform"
+
+#----------------------------------------------------------------#
+# set defaults
+#----------------------------------------------------------------#
+
+	# set default IP & netmask
+	DIPADDRESS=192.168.0.254
+	DNETMASK=255.255.255.0
+	DGATEWAY=192.168.0.1
+	
+	IPADDRESS=$DIPADDRESS
+	NETMASK=$DNETMASK
+	GATEWAY=$DGATEWAY
+
+	# set default password
+	DPASSWORD="password"
+	PASSWORD=$DPASSWORD
+	
+	# set the default raid level
+	DRAIDLEVEL=1
+	RAIDLEVEL=$DRAIDLEVEL
+	
+	# set default name of home partition
+	DHOMENAME=terraform
+	HOMENAME=$DHOMENAME
+	
+#----------------------------------------------------------------#
+# display help message
+#----------------------------------------------------------------#
+
+	# display help text and exit unless '$INSTALLER' is specified
+	if [ "$1" != "$INSTALLER" ]; then
+		echo
+		echo "$INSTALLER Installer"
+		echo
+		echo "usage : install $INSTALLER [-i ipaddress] [-n netmask] [-g gateway] [-p password] [-r raid] [-h home]"
+		echo "          ipaddress defaults to $DIPADDRESS"
+		echo "          netmask defaults to $DNETMASK"
+		echo "          gateway defaults to $DGATEWAY"
+		echo "          password defaults to '$DPASSWORD'"
+		echo "          raid defaults to $DRAIDLEVEL"
+		echo "          home defaults to '$DHOMENAME'"
+		echo
+		echo "WARNING : All data on system hard drives will be erased."
+		echo "          The $INSTALLER installer is non-interactive."
+		echo
+		exit 1
+	fi
+
+#----------------------------------------------------------------#
+# get user input
+#----------------------------------------------------------------#
+
+	# shift for the installer name
+	shift
+
+	# get arguments
+	while [ $# -ge 1 ]; do
+		case $1 in
+		-i | --ipaddress)
+			# get the ipaddress
+			shift
+			IPADDRESS=$1
+			;;
+		-n | --netmask)
+			# get the netmask
+			shift
+			NETMASK=$1
+			;;
+		-g | --gateway)
+			# get the gateway
+			shift
+			GATEWAY=$1
+			;;
+		-p | --password)
+			# get the password
+			shift
+			PASSWORD=$1
+			;;
+		-r | --raid)
+			# get the raid level
+			shift
+			RAIDLEVEL=$1
+			;;
+		-h | --home)
+			# get the home name
+			shift
+			HOMENAME=$1
+			;;
+		*)
+			#display help message
+			echo
+			echo "$INSTALLER Installer"
+			echo
+			echo "usage : install $INSTALLER [-i ipaddress] [-n netmask] [-g gateway] [-p password] [-r raid] [-h home]"
+			echo "          ipaddress defaults to $DIPADDRESS"
+			echo "          netmask defaults to $DNETMASK"
+			echo "          gateway defaults to $DGATEWAY"
+			echo "          password defaults to '$DPASSWORD'"
+			echo "          raid defaults to $DRAIDLEVEL"
+			echo "          home defaults to '$DHOMENAME'"
+			echo
+			echo "WARNING : All data on system hard drives will be erased."
+			echo "          The $INSTALLER installer is non-interactive."
+			echo
+			exit 1
+			;;
+		esac
+		shift
+	done
+
+#----------------------------------------------------------------#
+# run pre-install scripts
+#----------------------------------------------------------------#
+
+	for script in /cdrom/terraform/pre/*; do
+		if [ -x $script ]; then
+			$script
+		elif [ -e $script ]; then
+			. $script
+		fi
+	done
+
+#----------------------------------------------------------------#
+# run install script
+#----------------------------------------------------------------#
+
+	/cdrom/terraform/terraform fast-install -i $IPADDRESS -n $NETMASK -g $GATEWAY -p $PASSWORD -h $HOMENAME -r $RAIDLEVEL
+
+#----------------------------------------------------------------#
+# copy post-reboot scripts
+#----------------------------------------------------------------#
+
+	# make a firtboot script directory
+	mkdir /target/etc/rcS_firstboot
+	
+	# copy any firstboot scripts
+	cp /cdrom/terraform/post-reboot/* /target/etc/rcS_firstboot/
+	chmod 755 /target/etc/rcS_firstboot/*
+	
+	# build the firstboot script
+	FIRSTBOOT="
+	# run any firstboot scripts
+	for script in /etc/rcS_firstboot/*; do
+		if [ -x \$script ]; then
+			\$script
+		elif [ -e \$script ]; then
+			. \$script
+		fi
+	done
+	# remove ourself
+	rm /etc/rc2.d/S90firstboot
+"
+	echo "$FIRSTBOOT" > /target/etc/rc2.d/S90firstboot
+	chmod 755 /target/etc/rc2.d/S90firstboot
+
+#----------------------------------------------------------------#
+# copy system mods
+#----------------------------------------------------------------#
+
+cp -Rp /cdrom/terraform/system-mod/* /target/
+
+#----------------------------------------------------------------#
+# run post-install scripts
+#----------------------------------------------------------------#
+
+	for script in /cdrom/terraform/post/*; do
+		if [ -x $script ]; then
+			$script
+		elif [ -e $script ]; then
+			. $script
+		fi
+	done
+
+#----------------------------------------------------------------#
+# cleanup
+#----------------------------------------------------------------#
+	
+	cd /
+	umount /target/cdrom
+	umount /cdrom
+	# try and eject the cdrom
+	/target/usr/bin/eject /dev/cdrom
+	umount /dev/md/3
+	umount /target/boot
+	umount /target/proc
+	umount /target
+	
+	
+	echo ""
+	echo "this section of the install is finished"
+	echo ""
+	echo "remove the CD and reboot to finish the install"
+	echo ""
+	
+	# halt the system
+	#halt

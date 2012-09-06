@@ -1,0 +1,16 @@
+#!/bin/sh
+
+# detect hardware
+/bin/hw-detect
+
+# find and mount the Terraform cd
+/bin/findandmount
+
+# load kernel raid modules
+insmod /lib/modules/*/kernel/drivers/md/md.ko
+insmod /lib/modules/*/kernel/drivers/md/raid1.ko
+insmod /lib/modules/*/kernel/drivers/md/raid5.ko
+
+# load filesystem modules
+insmod /lib/modules/*/kernel/fs/ext3/ext3.ko
+insmod /lib/modules/*/kernel/fs/reiserfs/reiserfs.ko

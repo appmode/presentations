@@ -1,0 +1,179 @@
+#!/bin/sh
+
+#----------------------------------------------------------------#
+# terraform ISO builder
+#----------------------------------------------------------------#
+#
+#  terraform (c) copyright 2004 flame (www.bluepanel.org)
+#  modifications (c) copyright 2005 
+#  		Internet Vision Technologies <www.ivt.com.au>
+#
+#  originally based on a deranged psychotic dream i once had
+#
+#----------------------------------------------------------------#
+#
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License (version 2) as 
+#  published by the Free Software Foundation.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Library General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+#
+#----------------------------------------------------------------#
+#  created  : sometime back in 2004
+#  modified : 16-04-2005
+#----------------------------------------------------------------#
+
+# makes a Terraform install CD ISO
+#
+# usage : make-iso [ basedir ] [ target ]
+# basedir defaults to /usr/share/terraform/iso-source
+# target defaults to /tmp/terraform.iso
+#
+# You should have several GB of free space on your drive before
+# you even think about running this script.
+# 
+# oh, and you should be root when you run this, if your not root, get lost !
+# 
+	# set defaults
+	DBASEDIR="/usr/share/terraform/iso-source"
+	DTARGET="/tmp/terraform.iso"
+	BASEDIR=$DBASEDIR
+	TARGET=$DTARGET
+	
+	# get arguments
+	while [ $# -ge 1 ]; do
+		case $1 in
+		-b | --basedir)
+			# get the basedir
+			shift
+			BASEDIR=$1
+			;;
+		-t | --target)
+			# get the target
+			shift
+			TARGET=$1
+			;;
+		*)
+			#display help message
+			echo ""
+			echo "make-iso    Terraform ISO builder"
+			echo ""
+			echo "makes an ISO file (just like the name says)"
+			echo ""
+			echo "usage : make-iso [ -b basedir ] [ -t target ]"
+			echo "basedir defaults to $DBASEDIR"
+			echo "target defaults to $DTARGET"
+			echo ""
+			echo "basedir must NOT have a trailing slash !"
+			echo ""
+			exit 1
+			;;
+		esac
+		shift
+	done
+	
+	# check if the basedir exists and is ok
+	# TODO !!!!
+	
+	# we need loopback
+	modprobe loop
+
+	# cleanup temp cd dir
+	rm -Rf /tmp/terraform-cd
+	mkdir /tmp/terraform-cd
+
+	# copy cd to a temp dir
+	echo "copying CD base"
+	cp -Rp $BASEDIR/cd/* /tmp/terraform-cd/
+
+	# kill anything we don't want
+	# TODO !!!!
+	echo "removing unwanted files from CD base"
+	rm /tmp/terraform-cd/install/initrd.gz
+
+	# copy in our cd mods
+	echo "copying CD modifications"
+	cp -Rp $BASEDIR/cd-mod/* /tmp/terraform-cd/
+
+	# copy in terraform
+	echo "copying Terraform Scripts"
+	cp -Rp $BASEDIR/terraform /tmp/terraform-cd/
+
+	# copy in terraform
+	echo "copying System modifications"
+	cp -Rp $BASEDIR/system-mod /tmp/terraform-cd/terraform/
+
+	# cleanup temp initrd dir
+	rm -Rf /tmp/terraform-initrd
+	mkdir /tmp/terraform-initrd
+
+	# build and mount an empty initrd
+	echo "building empty initrd"
+	dd if=/dev/zero of=/tmp/terraform-cd/install/newroot.bin bs=1k count=32678
+	/sbin/mke2fs -i 1024 -b 1024 -m 5 -F -v /tmp/terraform-cd/install/newroot.bin
+	mount /tmp/terraform-cd/install/newroot.bin /tmp/terraform-initrd -t ext2 -o loop
+
+	# copy initrd to a temp dir
+	echo "copying initrd base"
+	cp -Rp $BASEDIR/initrd/* /tmp/terraform-initrd/
+
+	# kill any svn stuff
+	echo "removing .svn garbage"
+	recurse () {
+		#echo removing $1/.svn
+		rm -Rf $1/.svn
+		for file in $(/bin/ls $1)
+		do path=$1/$file
+			if [ -d $path ] && [ ! -L $path ]; then
+				recurse $path
+			fi
+		done ; }
+		
+	recurse /tmp/terraform-initrd
+	recurse /tmp/terraform-cd
+
+	# copy in our initrd mods
+	echo "copying initrd modifications"
+	cp -Rp $BASEDIR/initrd-mod/* /tmp/terraform-initrd/
+
+	# kill more svn stuff
+	echo "removing more .svn garbage"
+	recurse /tmp/terraform-initrd
+
+	# compress and copy in our initrd
+	echo "compressing initrd"
+	umount /tmp/terraform-initrd
+	gzip -c -9 /tmp/terraform-cd/install/newroot.bin > /tmp/terraform-cd/install/initrd.gz
+	rm /tmp/terraform-cd/install/newroot.bin
+
+	# make an iso
+	echo ""
+	echo "building ISO ... (we are almost done now !)"
+	mkisofs -r -o $TARGET -b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table /tmp/terraform-cd
+
+	# make an md5
+	echo ""
+	echo "building md5"
+	md5sum $TARGET > $TARGET.md5
+
+	# clean up
+	echo "cleaning up"
+	rm -Rf /tmp/terraform-cd
+	rm -Rf /tmp/terraform-initrd
+	rm -Rf /tmp/terraform-bin
+	
+	#finished
+	echo ""
+	echo "done !"
+	echo ""
+	echo "your ISO is ready for collection from $TARGET"
+	echo ""
+	echo "md5 is $TARGET.md5"
+	echo ""

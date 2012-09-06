@@ -1,0 +1,4 @@
+#!/bin/sh
+clear
+cat /cdrom/message 2>/dev/null
+/bin/sh

@@ -1,0 +1,824 @@
+#!/bin/sh
+
+#----------------------------------------------------------------#
+# terraform installer
+#----------------------------------------------------------------#
+#
+#  terraform (c) copyright 2004 flame (www.bluepanel.org)
+#  modifications (c) copyright 2005 
+#  		Internet Vision Technologies <www.ivt.com.au>
+#
+#  originally based on bootcd2disk from the debian 'bootcd' package
+#		but that was a long time ago and there may not be much 
+# 		(if any) of that code left in here.
+#
+#----------------------------------------------------------------#
+#
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License (version 2) as 
+#  published by the Free Software Foundation.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Library General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+#
+#----------------------------------------------------------------#
+#  created  : 07-04-2004
+#  modified : 01-04-2005
+#----------------------------------------------------------------#
+
+# installs a base debian/ubuntu system on root-raid
+#
+# usage : terraform [fast-|quiet-|nohdd-]install [ -i ipaddress ] [ -n netmask ] [ -g gateway ] [ -p password ] [ -h home ] [ -r raid ] [ -o hoastname ]
+# usage : terraform test [ -i ipaddress ] [ -n netmask ] [ -g gateway ] [ -p password ] [ -h home ] [ -r raid ] [ -o hoastname ]
+# ipaddress defaults to 192.168.0.254
+# netmask defaults to 255.255.255.0
+# gateway defaults to 192.168.0.1
+# password defaults to 'password'
+# home defaults to 'home'
+# hostname defaults to 'local'
+# raid defaults to 1
+
+#----------------------------------------------------------------#
+# set defaults
+#----------------------------------------------------------------#
+
+	# set default IP & netmask
+	DIPADDRESS=192.168.0.254
+	DNETMASK=255.255.255.0
+	DGATEWAY=192.168.0.1
+	
+	IPADDRESS=$DIPADDRESS
+	NETMASK=$DNETMASK
+	GATEWAY=$DGATEWAY
+
+	# set default password
+	DPASSWORD="password"
+	PASSWORD=$DPASSWORD
+	
+	# set the default raid level
+	DRAIDLEVEL=1
+	RAIDLEVEL=$DRAIDLEVEL
+	
+	# set default name of home partition
+	DHOMENAME=home
+	HOMENAME=$DHOMENAME
+	
+	# host name
+	DHOSTNAME="local"
+	HOSTNAME=$DHOSTNAME
+
+#----------------------------------------------------------------#
+# display help message
+#----------------------------------------------------------------#
+
+	# display help text and exit unless 'install' is specified
+	if [ "$1" != "install" ] && [ "$1" != "quiet-install" ] && [ "$1" != "fast-install" ] && [ "$1" != "nohdd-install" ] && [ "$1" != "test" ]; then
+		echo
+		echo "Terraform"
+		echo
+		echo "usage : terraform [fast-|quiet-|nohdd-]install [-i ipaddress] [-n netmask] [-g gateway] [-p password] [-h home] [-r raid] [-o hostname]"
+		echo "usage : terraform test [-i ipaddress] [-n netmask] [-g gateway] [-p password] [-h home] [-r raid] [-o hostname]"
+		echo "          ipaddress defaults to $DIPADDRESS"
+		echo "          netmask defaults to $DNETMASK"
+		echo "          gateway defaults to $DGATEWAY"
+		echo "          password defaults to '$DPASSWORD'"
+		echo "          home defaults to '$DHOMENAME'"
+		echo "          hostname defaults to '$DHOSTNAME'"
+		echo "          raid defaults to $DRAIDLEVEL"
+		echo
+		echo "'terraform test' will test your system and provide install info without doing an install"
+		echo
+		echo "WARNING : All data on system hard drives will be erased."
+		echo "          The Terraform installer is non-interactive."
+		echo
+		exit 1
+	fi
+
+#----------------------------------------------------------------#
+# get user input
+#----------------------------------------------------------------#
+
+	# what are we doing ?
+	TYPE=$1
+	shift
+
+	# get arguments
+	while [ $# -ge 1 ]; do
+		case $1 in
+		-i | --ipaddress)
+			# get the ipaddress
+			shift
+			IPADDRESS=$1
+			;;
+		-n | --netmask)
+			# get the netmask
+			shift
+			NETMASK=$1
+			;;
+		-g | --gateway)
+			# get the gateway
+			shift
+			GATEWAY=$1
+			;;
+		-p | --password)
+			# get the password
+			shift
+			PASSWORD=$1
+			;;
+		-r | --raid)
+			# get the raid level
+			shift
+			RAIDLEVEL=$1
+			;;
+		-h | --home)
+			# get the home name
+			shift
+			HOMENAME=$1
+			;;
+		-o | --hostname)
+			# get the hostname
+			shift
+			HOASTNAME=$1
+			;;
+		*)
+			#display help message
+			echo
+			echo "Terraform"
+			echo
+			echo "usage : terraform [fast-|quiet-|nohdd-]install [-i ipaddress] [-n netmask] [-g gateway] [-p password] [-h home] [-r raid] [-o hostname]"
+			echo "usage : terraform test [-i ipaddress] [-n netmask] [-g gateway] [-p password] [-h home] [-r raid] [-o hostname]"
+			echo "          ipaddress defaults to $DIPADDRESS"
+			echo "          netmask defaults to $DNETMASK"
+			echo "          gateway defaults to $DGATEWAY"
+			echo "          password defaults to '$DPASSWORD'"
+			echo "          home defaults to '$DHOMENAME'"
+			echo "          hostname defaults to '$DHOSTNAME'"
+			echo "          raid defaults to $DRAIDLEVEL"
+			echo
+			echo "'terraform test' will test your system and provide install info without doing an install"
+			echo
+			echo "WARNING : All data on system hard drives will be erased."
+			echo "          The Terraform installer is non-interactive."
+			echo
+			exit 1
+			;;
+		esac
+		shift
+	done
+	
+
+#----------------------------------------------------------------#
+# display warning message
+#----------------------------------------------------------------#
+
+	# warn the user that we are going to erase any hard drives on the system
+	# give them 30 seconds to hit ctrl-c
+	if [ "$TYPE" != "fast-install" ] && [ "$TYPE" != "nohdd-install" ] && [ "$TYPE" != "test" ]; then
+		
+		# make some noise
+		if [ "$TYPE" != "quiet-install" ]; then
+			printf "\a"
+			sleep 0.1
+			printf "\a"
+		fi
+		
+		# display 1st warning
+		clear
+		echo "Welcome to Terraform"
+		echo
+		echo "WARNING : All hard drives in this system will be ERASED IN 30 SECONDS !"
+		echo
+		echo "Hit Ctrl-C to abort"
+		echo
+		echo
+		
+		# wait 10 seconds
+		sleep 10
+
+		# display 2nd warning
+		clear
+		echo "Welcome to Terraform"
+		echo
+		echo "WARNING : All hard drives in this system will be ERASED IN 20 SECONDS !"
+		echo
+		echo "Hit Ctrl-C to abort"
+		echo
+		echo
+		i=0
+		
+		# wait 10 seconds
+		while [ $i -le 10 ]
+		do
+			# beep every second
+			sleep 1
+			if [ "$TYPE" != "quiet-install" ]; then
+				printf "\a"
+			fi
+			i=`expr $i + 1`
+		done
+
+		# display 3rd warning
+		clear
+		echo "Welcome to Terraform"
+		echo
+		echo "WARNING : All hard drives in this system will be ERASED IN 10 SECONDS !"
+		echo
+		echo "Hit Ctrl-C to abort"
+		echo
+		echo
+		i=0
+		
+		# wait 10 seconds
+		while [ $i -le 20 ]
+		do
+			# beep every 1/2 a second
+			sleep 0.5
+			if [ "$TYPE" != "quiet-install" ]; then
+				printf "\a"
+			fi
+			i=`expr $i + 1`
+		done
+
+		# display start message
+		clear
+		echo "Starting Terraform"
+		
+		# make a noise
+		if [ "$TYPE" != "quiet-install" ]; then
+			sleep 1
+			printf "\a"
+			sleep 0.1
+			printf "\a"
+		fi
+	fi
+
+#----------------------------------------------------------------#
+# Select hard drives for install
+#----------------------------------------------------------------#
+
+	
+
+	# set minimum hard drive size (4000000 = 4gb)
+	HDSIZE=4000000
+
+	HDDSIZE=$HDSIZE
+	HDDTYPE="none"
+	DISK1="/dev/null"
+	DISK2="/dev/null"
+	DISK3="/dev/null"
+	DISK4="/dev/null"
+
+	# check for first 2 Hard Drives
+	HD0=`/sbin/sfdisk -s /dev/discs/disc0/disc 2>/dev/null`
+	HD1=`/sbin/sfdisk -s /dev/discs/disc1/disc 2>/dev/null`
+
+	# default drive setup
+	# RAID or SINGLE or none (in that order)
+	if [ "`expr $HD0 \> $HDSIZE 2>/dev/null`" = 1 ]; then
+		# disc one is large enough to install on
+		HDDTYPE="SINGLE"
+		HDDSIZE=$HD0
+		DISK1="/dev/discs/disc0"
+		if [ "`expr $HD1 \> $HDSIZE 2>/dev/null`" = 1 ]; then
+			# disk 2 is also large enough to install on
+			HDDTYPE="RAID"
+			DISK2="/dev/discs/disc1"
+			if [ "`expr $HDDSIZE \> $HD1 2>/dev/null`" = 1 ]; then
+				# the smallest size wins
+				HDDSIZE=$HD1
+			fi
+		fi
+	elif [ "`expr $HD1 \> $HDSIZE 2>/dev/null`" = 1 ]; then
+		# disc 2 is large enough to install on
+		HDDTYPE="SINGLE"
+		HDDSIZE=$HD1
+		DISK1="/dev/discs/disc1"
+	fi
+	
+	# try and do raid5 if we have been asked to
+	# RAID5.4 or RAID5.3 or none
+	# if we are asked for RAID5 and we can't do it we fail
+	if [ "$RAIDLEVEL" = "5" ]; then
+		if [ "$HDDTYPE" = "none" ] || [ "$HDDTYPE" = "SINGLE" ] ; then
+			# can't do raid 5 if we don't have enough disks
+			HDDTYPE="none"
+		else
+			# if we can't do a RAID5 install we want to fail
+			HDDTYPE="none"
+			
+			# look for another 2 hard drives
+			HD2=`/sbin/sfdisk -s /dev/discs/disc2/disc 2>/dev/null`
+			HD3=`/sbin/sfdisk -s /dev/discs/disc3/disc 2>/dev/null`
+			
+			if [ "`expr $HD2 \> $HDSIZE 2>/dev/null`" = 1 ]; then
+				# disk 3 is also large enough to install on
+				HDDTYPE="RAID5.3"
+				DISK3="/dev/discs/disc2"
+				if [ "`expr $HDDSIZE \> $HD2 2>/dev/null`" = 1 ]; then
+					# the smallest size wins
+					HDDSIZE=$HD2
+				fi
+				if [ "`expr $HD3 \> $HDSIZE 2>/dev/null`" = 1 ]; then
+					# disk 4 is also large enough to install on
+					HDDTYPE="RAID5.4"
+					DISK4="/dev/discs/disc3"
+					if [ "`expr $HDDSIZE \> $HD3 2>/dev/null`" = 1 ]; then
+						# the smallest size wins
+						HDDSIZE=$HD3
+					fi
+				fi
+			fi
+		fi
+	fi
+
+#----------------------------------------------------------------#
+# Calculate patition sizes
+#----------------------------------------------------------------#
+
+	# convert hard drive size from blocks to MB
+	HDDSIZEM=`expr $HDDSIZE / 1024`
+	
+	# /boot	p1	md1	50mb
+	# swap	p2	md2	500mb-1gb
+	# /		p3	md3	3gb-20gb
+	# /home p4	md4	the rest
+	# 100~ mb free (wasted, unusable) space
+	
+	# set partition sizes based on the total disk size
+	if [ "`expr $HDDSIZEM \> 38000 2>/dev/null`" = 1 ]; then
+		#40GB +
+		MD0=50
+		MD1=1000
+		MD2=20000
+		MD3=`expr $HDDSIZEM - 21150`
+	elif [ "`expr $HDDSIZEM \> 18000 2>/dev/null`" = 1 ]; then
+		#20GB +
+		MD0=50
+		MD1=1000
+		MD2=10000
+		MD3=`expr $HDDSIZEM - 11150`
+    elif [ "`expr $HDDSIZEM \> 8000 2>/dev/null`" = 1 ]; then
+      #10GB +
+		MD0=50
+		MD1=500
+		MD2=5000
+		MD3=`expr $HDDSIZEM - 5650`
+    elif [ "`expr $HDDSIZEM \> 3700 2>/dev/null`" = 1 ]; then
+      #4GB +
+		MD0=50
+		MD1=500
+		MD2=3000
+		MD3=`expr $HDDSIZEM - 3650`
+    fi
+	
+#----------------------------------------------------------------#
+# Stop here if we were just testing
+#----------------------------------------------------------------#
+
+	if [ "$TYPE" = "test" ] || [ "$HDDTYPE" = "none" ]; then
+		echo ""
+		echo "Terraform Test Results"
+		echo ""
+		if [ "$HDDTYPE" = "none" ]; then
+			echo "Could not find a suitable hard drive"
+		elif [ "$HDDTYPE" = "SINGLE" ]; then
+			echo "Install type is single disk RAID 1"
+		elif [ "$HDDTYPE" = "RAID" ]; then
+			echo "Install type is RAID 1"
+		elif [ "$HDDTYPE" = "RAID5.3" ]; then
+			echo "Install type is 3 disk RAID 5"
+		elif [ "$HDDTYPE" = "RAID5.4" ]; then
+			echo "Install type is 4 disk RAID 5"
+		fi
+		#echo ""
+		echo "Requested RAID level : $RAIDLEVEL"
+		#echo ""
+		if [ "$DISK1" != "/dev/null" ]; then
+			if [ "$DISK1" = "/dev/discs/disc1" ]; then
+				HD0M=`expr $HD1 / 1024`
+			else
+				HD0M=`expr $HD0 / 1024`
+			fi
+			echo "disk 1      : $DISK1"
+			echo "disk 1 size : $HD0M mb"
+			#echo ""
+		fi
+		if [ "$DISK2" != "/dev/null" ]; then
+			HD1M=`expr $HD1 / 1024`
+			echo "disk 2      : $DISK2"
+			echo "disk 2 size : $HD1M mb"
+			#echo ""
+		fi
+		if [ "$DISK3" != "/dev/null" ]; then
+			HD2M=`expr $HD2 / 1024`
+			echo "disk 3      : $DISK3"
+			echo "disk 3 size : $HD2M mb"
+			#echo ""
+		fi
+		if [ "$DISK4" != "/dev/null" ]; then
+			HD3M=`expr $HD3 / 1024`
+			echo "disk 4      : $DISK4"
+			echo "disk 4 size : $HD3M mb"
+			#echo ""
+		fi
+		HDSIZEM=`expr $HDSIZE / 1024`
+		echo "minimum disk size for install : $HDSIZEM mb"
+		#echo ""
+		echo "usable disk size found : $HDDSIZEM mb"
+		#echo ""
+		echo "home partition name : /$HOMENAME"
+		echo "home partition size : $MD3 mb"
+		#echo ""
+		echo "IP address : $IPADDRESS"
+		echo "Netmask    : $NETMASK"
+		echo "Gateway    : $GATEWAY"
+		#echo ""
+		echo "password   : $PASSWORD"
+		#echo ""
+		#echo ""
+		exit 1
+	fi
+
+#----------------------------------------------------------------#
+# Setup hard drives for install
+#----------------------------------------------------------------#
+
+	# if we did not set a hard drive, display an error & exit
+	if [ "$HDDTYPE" = "none" ]; then
+		echo "could not find a suitable hard drive"
+		exit 1
+	fi
+
+	# /boot	p1	md1	50mb
+	# swap	p2	md2	500mb-1gb
+	# /		p3	md3	3gb-20gb
+	# /home p4	md4	the rest
+	# 100~ mb free (wasted, unusable) space
+
+	# set $SFDISK, used to set partition sizes
+SFDISK="
+,$MD0,fd
+,$MD1,fd
+,$MD2,fd
+,$MD3,fd
+"
+	# make partitions
+	if [ "$TYPE" != "nohdd-install" ]; then
+		if [ "$DISK1" != "/dev/null" ]; then
+			echo "$SFDISK" | /sbin/sfdisk --force -qL -uM $DISK1/disc >/dev/null
+		fi
+		if [ "$DISK2" != "/dev/null" ]; then
+			echo "$SFDISK" | /sbin/sfdisk --force -qL -uM $DISK2/disc >/dev/null
+		fi
+		if [ "$DISK3" != "/dev/null" ]; then
+			echo "$SFDISK" | /sbin/sfdisk --force -qL -uM $DISK3/disc >/dev/null
+		fi
+		if [ "$DISK4" != "/dev/null" ]; then
+			echo "$SFDISK" | /sbin/sfdisk --force -qL -uM $DISK4/disc >/dev/null
+		fi
+	fi
+
+	# make raid arrays
+	if [ "$TYPE" != "nohdd-install" ]; then
+
+		# because /dev/md may not exist, we need to create it (thanks hoary!)
+		mkdir /dev/md
+		mknod /dev/md/0 b 9 0
+		mknod /dev/md/1 b 9 1
+		mknod /dev/md/2 b 9 2
+		mknod /dev/md/3 b 9 3
+
+		# try to stop raid (probably a waste of time)
+		mdadm --stop --force /dev/md/0 /dev/md/1 /dev/md/2 /dev/md/3 /dev/md/4
+		
+		if [ "$HDDTYPE" = "RAID5.4" ]; then
+			# set up 4 disk RAID5
+			
+			# turn on DMA
+			hdparm -d1 $DISK4/disc
+			hdparm -d1 $DISK3/disc
+			hdparm -d1 $DISK2/disc
+			hdparm -d1 $DISK1/disc
+			
+			echo "y"|mdadm --create --force /dev/md/0 -n 4 -l 5 $DISK1/part1 $DISK2/part1 $DISK3/part1 $DISK4/part1
+			echo "y"|mdadm --create --force /dev/md/1 -n 4 -l 5 $DISK1/part2 $DISK2/part2 $DISK3/part2 $DISK4/part2
+			echo "y"|mdadm --create --force /dev/md/2 -n 4 -l 5 $DISK1/part3 $DISK2/part3 $DISK3/part3 $DISK4/part3
+			echo "y"|mdadm --create --force /dev/md/3 -n 4 -l 5 $DISK1/part4 $DISK2/part4 $DISK3/part4 $DISK4/part4
+			
+		elif [ "$HDDTYPE" = "RAID5.3" ]; then
+			# set up 3 disk RAID5
+			
+			# turn on DMA
+			hdparm -d1 $DISK3/disc
+			hdparm -d1 $DISK2/disc
+			hdparm -d1 $DISK1/disc
+			
+			echo "y"|mdadm --create --force /dev/md/0 -n 3 -l 5 $DISK1/part1 $DISK2/part1 $DISK3/part1
+			echo "y"|mdadm --create --force /dev/md/1 -n 3 -l 5 $DISK1/part2 $DISK2/part2 $DISK3/part2
+			echo "y"|mdadm --create --force /dev/md/2 -n 3 -l 5 $DISK1/part3 $DISK2/part3 $DISK3/part3
+			echo "y"|mdadm --create --force /dev/md/3 -n 3 -l 5 $DISK1/part4 $DISK2/part4 $DISK3/part4
+			
+		elif [ "$HDDTYPE" = "RAID" ]; then
+			# set up 2 disk RAID1
+			
+			# turn on DMA
+			hdparm -d1 $DISK2/disc
+			hdparm -d1 $DISK1/disc
+			
+			echo "y"|mdadm --create --force /dev/md/0 -n 2 -l 1 $DISK1/part1 $DISK2/part1
+			echo "y"|mdadm --create --force /dev/md/1 -n 2 -l 1 $DISK1/part2 $DISK2/part2
+			echo "y"|mdadm --create --force /dev/md/2 -n 2 -l 1 $DISK1/part3 $DISK2/part3
+			echo "y"|mdadm --create --force /dev/md/3 -n 2 -l 1 $DISK1/part4 $DISK2/part4
+		else
+			# we have only one disc, do a failed disc raid install
+			# TODO !!!! - work out how to do --dangerous-no-resync with mdadm
+			# and maybe try --run
+			# and maybe we don't need to wait for the resync ??
+			
+			# turn on DMA
+			hdparm -d1 $DISK1/disc
+			
+			echo "y"|mdadm --create --force /dev/md/0 -n 2 -l 1 $DISK1/part1 missing
+			echo "y"|mdadm --create --force /dev/md/1 -n 2 -l 1 $DISK1/part2 missing
+			echo "y"|mdadm --create --force /dev/md/2 -n 2 -l 1 $DISK1/part3 missing
+			echo "y"|mdadm --create --force /dev/md/3 -n 2 -l 1 $DISK1/part4 missing
+		fi
+
+		# make ext3 file system (/boot)
+		mke2fs -j /dev/md/0
+
+		# make swap
+		mkswap /dev/md/1
+
+		# make reiser file system (/)
+		mkreiserfs -q /dev/md/2
+		
+		# make reiser file system (/home)
+		mkreiserfs -q /dev/md/3
+		
+	fi
+
+	# mount md2 (root)
+	mount /dev/md/2 /target
+
+	# mount md0 ( /boot)
+	mkdir -p /target/boot
+	mount /dev/md/0 /target/boot
+	
+	# mount md3 (home)
+	mkdir -p /target/$HOMENAME
+	mount /dev/md/3 /target/$HOMENAME
+
+#----------------------------------------------------------------#
+# Install system
+#----------------------------------------------------------------#
+
+	# work out the dist we are installing
+	# a bit of a hack but it should always work ??
+	DIST=`ls -S1 /cdrom/dists/ | head -n1`
+	
+	# install a base debian system
+	debootstrap $DIST /target file:/cdrom
+
+	# make missing dirs
+	# TODO !!!! - check if we even need to do this anymore
+	mkdir -p -m 750 /target/cdrom
+	mkdir -p -m 750 /target/floppy
+	mkdir -p -m 555 /target/proc
+	mkdir -p -m 750 /target/lost+found
+	mkdir -p -m 750 /target/mnt
+	mkdir -p -m 1777 /target/tmp
+
+	# copy /etc/mkinitrd/modules & /etc/modules
+	cp /etc/mod-init /target/etc/mkinitrd/modules
+	cp /etc/mod-boot /target/etc/modules
+	chmod 755 /target/etc/mkinitrd/modules
+	chmod 755 /target/etc/modules
+
+	#mount proc
+	mount -t proc none /target/proc
+
+	#mount cdrom
+	mount /dev/cdrom /target/cdrom
+	
+	# go directly to jail, do not pass go, do not collect $200
+	# (everything from here on in needs to be chrooted)
+	# don't forget if your smoking crack with a pipe to chroot
+	# both sides of the pipe !!!!
+	#
+	# 'chroot /somewhere something | something else' = get out of jail free (BAD)
+	# 'chroot /somewhere something | chroot /somewhere something else' = life without parole (GOOD)
+	# 
+	# oh, and the same goes for them little arrow things, 
+	# 'chroot /somewhere echo something > somewhere else' would be bad !
+
+		# make fstab
+		FSTAB="
+# /etc/fstab: static file system information.
+#
+# <file system> <mount point>   <type>  <options>       <dump>  <pass>
+proc            /proc           proc    defaults        0       0
+/dev/md0       /boot           ext2    defaults        0       2
+/dev/md1       none            swap    sw              0       0
+/dev/md2       /               reiserfs defaults,usrquota,grpquota     0       1
+/dev/md3       /$HOMENAME      reiserfs defaults,usrquota,grpquota     0       2
+#/dev/fd0        /floppy         auto    user,noauto             0       0
+#/dev/cdrom      /cdrom          iso9660 ro,user,noauto          0       0
+"
+		echo "$FSTAB" > /target/etc/fstab
+
+		# setup locale
+		echo "en_AU ISO-8859-1" > /target/etc/locale.gen
+		chroot /target/ locale-gen
+
+		# setup apt (temp)
+		chroot /target/ mkdir -p /etc/apt
+		echo "deb file:/cdrom/ stable main restricted" > /target/etc/apt/sources.list
+		chroot /target/ apt-get update
+
+		# make initrd.conf
+		INITRD="
+# /etc/mkinitrd/mkinitrd.conf:
+#  Configuration file for mkinitrd(8).  See mkinitrd.conf(5).
+#
+# This file is meant to be parsed as a shell script.
+
+# What modules to install.
+MODULES=most
+
+# The length (in seconds) of the startup delay during which linuxrc may be
+# interrupted.
+DELAY=5
+
+# If this is set to probe mkinitrd will try to figure out what's needed to
+# mount the root file system.  This is equivalent to the old PROBE=on setting.
+ROOT=/dev/md2
+
+# This controls the permission of the resulting initrd image.
+UMASK=022
+
+# Command to generate the initrd image.
+MKIMAGE='mkcramfs %s %s > /dev/null'
+
+"
+		echo "$INITRD" > /target/etc/mkinitrd/mkinitrd.conf
+
+		# make apt-get as quiet as we can
+		export DEBIAN_PRIORITY=critical
+		
+		# stop the kernel install from asking us about initrd
+		echo "do_initrd = Yes" > /target/etc/kernel-img.conf
+
+		# stop the kernel install from asking us about /initrd.img
+		chroot /target/ touch /boot/initrd.fake
+		chroot /target/ ln -s /boot/initrd.fake /initrd.img
+
+		# stop the kernel install from asking us about /initrd.img
+		chroot /target/ touch /boot/vmlinuz.fake
+		chroot /target/ ln -s /boot/vmlinuz.fake /vmlinuz
+
+		# install a kernel
+		chroot /target/ apt-get -y install linux-image-2*
+
+		# build lilo.conf
+		LILO="
+boot=/dev/md0
+raid-extra-boot=mbr-only
+delay=0
+vga=0
+
+image=/vmlinuz
+root=/dev/md2
+initrd=/initrd.img
+label=Linux
+read-only
+"
+		echo "$LILO" > /target/etc/lilo.conf
+
+		# install lilo
+		# we MUST already have an /etc/lilo.conf or we will be asked to click ok here
+		# this is because the lilo deb is very rude and just won't shut up !
+		chroot /target/ apt-get -qq install lilo
+
+		# install lilo
+		chroot /target/ lilo
+
+		# build network config
+		NETWORK="
+
+# the loopback interface
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet static
+address $IPADDRESS
+netmask $NETMASK
+gateway $GATEWAY
+
+"
+		echo "$NETWORK" > /target/etc/network/interfaces
+
+		# build ssh host key
+		chroot /target/ mkdir -p /etc/ssh
+		chroot /target/ rm -f /etc/ssh/ssh_host_key /etc/ssh/ssh_host_key.pub
+		chroot /target/ ssh-keygen -t rsa -b 1024 -f /etc/ssh/ssh_host_key -N ''
+		
+		# install ssh
+		chroot /target/ apt-get -y install ssh
+		chroot /target/ apt-get -y install openssh-client
+		chroot /target/ apt-get -y install openssh-server
+		
+		# make a no-login shell
+		BADSH="#!/bin/sh
+
+/bin/echo -e \"\\nShell access is not permitted.\\n\\n\"
+"
+		echo "$BADSH" > /target/bin/badsh
+
+		# turn on shadow passwords
+		chroot /target/ shadowconfig on
+	
+		# add a hostname
+		echo "$HOSTNAME" > /target/etc/hostname
+		HOSTS="127.0.0.1       localhost.localdomain   localhost  $HOSTNAME
+		"
+		echo "$HOSTS" > /target/etc/hosts
+		chroot /target/ hostname $HOSTNAME
+
+		# autostart raid
+		AUTOSTART="# This file is automatically generated.
+# Run 'dpkg-reconfigure mdadm' to modify it.
+START_DAEMON=true
+MAIL_TO="root"
+AUTOSTART=true
+"
+		echo "$AUTOSTART" > /target/etc/mdadm/debian.conf
+
+		# add admin user
+		chroot /target/ groupadd admin
+		chroot /target/ useradd -g admin -d /home/admin admin
+		chroot /target/ mkdir -p /home/admin
+		chroot /target/ chmod 700 /home/admin
+		chroot /target/ chown admin.admin /home/admin
+		ADMINUSER="admin:"$PASSWORD
+		echo $ADMINUSER |chroot /target/ chpasswd
+
+		# set root password
+		ROOTUSER="root:"$PASSWORD
+		echo $ROOTUSER |chroot /target/ chpasswd
+
+		# setup ownership & permissions
+		chroot /target/ chmod 755 /bin/badsh
+		#chroot /target/ chmod 750 /cdrom
+		chroot /target/ chmod 750 /floppy
+		chroot /target/ chmod 555 /proc
+		chroot /target/ chmod 750 /lost+found
+		chroot /target/ chmod 750 /mnt
+		chroot /target/ chmod 1777 /tmp
+		#chmod -R 755 /var/www/*
+
+		# setup apt (for real this time)
+		chroot /target/ cp /etc/apt/sources.list /etc/apt/sources.list.terraform
+		APT="
+deb http://archive.ubuntu.com/ubuntu $DIST main restricted universe multiverse
+deb-src http://archive.ubuntu.com/ubuntu $DIST main restricted
+
+deb http://security.ubuntu.com/ubuntu $DIST-security main restricted
+deb-src http://security.ubuntu.com/ubuntu $DIST-security main restricted
+"
+		echo "$APT" > /target/etc/apt/sources.list
+		
+		# we may not have a real network connection yet, so we can't do this here !
+		# apt-get update
+
+
+	# get out of jail (chroot finishes here)
+
+#----------------------------------------------------------------#
+# FINISHED
+#----------------------------------------------------------------#
+
+#----------------------------------------------------------------#
+# NOTES
+#----------------------------------------------------------------#
+#
+# Terraform would normaly be run by a parent script, the parent
+# script should run anything in ./pre/ before Terraform is run 
+# and anything in ./post/ after terraform is run.
+#
+# The parent script should unmount the drives before it exits
+# cd /
+# umount /dev/md/3 (this is home, but it may nob be called /home)
+# umount /target/boot
+# umount /target/cdrom
+# umount /target/proc
+# umount /target
+#
+#----------------------------------------------------------------#

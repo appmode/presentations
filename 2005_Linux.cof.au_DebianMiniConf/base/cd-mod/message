@@ -1,0 +1,7 @@
+Welcome to the Terraform install CD
+
+To run the Terraform installer use the command ;
+    install terraform [ ipaddress ] [ netmask ] [ gateway ] [ password ]
+
+WARNING : The Terraform installer will erase all data on your hard drives !
+

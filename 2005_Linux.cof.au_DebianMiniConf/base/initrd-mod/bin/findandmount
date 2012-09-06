@@ -1,0 +1,80 @@
+#!/bin/sh
+
+#----------------------------------------------------------------#
+# terraform findandmount
+#----------------------------------------------------------------#
+#
+#  terraform (c) copyright 2004 flame (www.bluepanel.org)
+#  modifications (c) copyright 2005 
+#  		Internet Vision Technologies <www.ivt.com.au>
+#
+#
+#  originally based on the mkrootfs script from
+#  http://pages.cpsc.ucalgary.ca/~arlt/fire/mkrootfs
+#
+#  mkrootfs originally based on find-and-mount-cdrom
+#  from Mindi Linux, by Hugo Rabson
+#  http://www.mondorescue.com/
+#
+#----------------------------------------------------------------#
+#
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License (version 2) as 
+#  published by the Free Software Foundation.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Library General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+#
+#----------------------------------------------------------------#
+#  created  : 24-04-04
+#  modified : 28-02-05
+#----------------------------------------------------------------#
+
+# finds and mounts a Terraform cdrom
+#
+# findandmount will create a symlink /dev/cdrom and will
+# mount the cdrom at /cdrom
+#
+# usage : findandmount
+
+	echo "looking for a Terraform install CD (this could take a while)"
+	
+	# get a list of all CD drives
+	for device in /dev/cdroms/cdrom* ; do
+		echo "checking $device"
+		
+		# try to mount the drive on /cdrom
+		echo "looking for a CD in $device"
+		mount $device -t iso9660 -o ro /cdrom 2> /dev/null
+		
+		# skip the drive if we can't mount it
+		if [ "$?" -ne "0" ] ; then
+			echo "no CD found in $device"
+			continue
+		fi
+		
+		# check if the CD is a Terraform install CD
+		echo "checking the CD in $device"
+		if [ ! -f /cdrom/terraform/version ]; then
+			umount /cdrom
+			echo "CD in $device is not a Terraform install CD"
+			continue
+		else
+			# symlink /dev/cdrom
+			ln -s $device /dev/cdrom 
+			# we found a Terraform install CD & it is now mounted on /cdrom, we are finished.
+			echo "found a Terraform install CD in $device"
+			echo "$device is mounted as /cdrom"
+			exit 1
+		fi
+	done
+  
+	echo ""
+	echo "Could not find a Terraform install CD"
+	echo ""

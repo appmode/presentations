@@ -1,0 +1,284 @@
+#!/bin/sh
+
+#----------------------------------------------------------------#
+# terraform ISO source directory builder
+#----------------------------------------------------------------#
+#
+#  terraform (c) copyright 2004 flame (www.bluepanel.org)
+#  modifications (c) copyright 2005 
+#  		Internet Vision Technologies <www.ivt.com.au>
+#
+#----------------------------------------------------------------#
+#
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License (version 2) as 
+#  published by the Free Software Foundation.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Library General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+#
+#----------------------------------------------------------------#
+#  created  : 11-03-2005
+#  modified : 16-04-2005
+#----------------------------------------------------------------#
+
+# makes a Terraform ISO source directory
+#
+# usage : make-terraform [ target ] [ cdrom ] [ basedir ]]
+# target defaults to /usr/share/terraform/iso-source"
+# cdrom defaults to /cdrom
+# basedir defaults to /usr/share/terraform/base
+#
+# You should have several GB of free space on your drive before
+# you even think about running this script.
+# 
+# oh, and you should be root when you run this, if your not root, get lost !
+# 
+
+	# set defaults
+	DCDROM="/cdrom"
+	DBASEDIR="/usr/share/terraform/base"
+	DTARGET="/usr/share/terraform/iso-source"
+	CDROM=$DCDROM
+	BASEDIR=$DBASEDIR
+	TARGET=$DTARGET
+	
+	# get arguments
+	while [ $# -ge 1 ]; do
+		case $1 in
+		-c | --cdrom)
+			# get the cdrom
+			shift
+			CDROM=$1
+			;;
+		-b | --basedir)
+			# get the basedir
+			shift
+			BASEDIR=$1
+			;;
+		-t | --target)
+			# get the target
+			shift
+			TARGET=$1
+			;;
+		*)
+			#display help message
+			echo ""
+			echo "make-terraform    Terraform ISO source builder"
+			echo ""
+			echo "makes a Terraform ISO source directory"
+			echo ""
+			echo "uses files from the Terraform base directory and a debian based CD"
+			echo ""
+			echo "usage : make-terraform [ -t target ] [ -c cdrom ] [ -b basedir ]"
+			echo "target defaults to $DTARGET"
+			echo "cdrom defaults to $DCDROM"
+			echo "basedir defaults to $DBASEDIR"
+			echo ""
+			echo ""
+			echo "target, cdrom and basedir must NOT have a trailing slash !"
+			echo ""
+			exit 1
+			;;
+		esac
+		shift
+	done
+	
+	# check if the cdrom & source exist and are ok
+	# TODO !!!!
+	
+	# make sure the target does NOT exist
+	# TODO !!!!
+	
+	# we need loopback
+	modprobe loop
+	
+	# make the target dir
+	mkdir -p $TARGET
+	
+	# move to the target dir (just in case we still need to)
+	cd $TARGET
+
+	# pre-emptive cleanup
+	umount /tmp/terraform/mount-initrd
+	rm -R /tmp/terraform
+
+	# make a terraform temp dir
+	mkdir -p /tmp/terraform
+	
+	# make the base directories
+	mkdir -p $TARGET/cd
+	mkdir -p $TARGET/cd-mod
+	mkdir -p $TARGET/initrd
+	mkdir -p $TARGET/initrd-mod
+	mkdir -p $TARGET/system-mod
+	mkdir -p $TARGET/terraform
+	
+	# copy the contents of the original install cd
+	echo "copying files from the original install CD"
+	echo "this will take a while"
+	cp -Rp $CDROM/* $TARGET/cd/
+	
+	# get the initrd source
+	echo "copying initrd files"
+	mkdir -p /tmp/terraform/mount-initrd
+	cp $TARGET/cd/install/initrd.gz /tmp/terraform/initrd.gz
+	chmod 777 /tmp/terraform/initrd.gz
+	gunzip /tmp/terraform/initrd.gz
+	mount -t ext2 -o loop /tmp/terraform/initrd /tmp/terraform/mount-initrd
+	cp -Rip /tmp/terraform/mount-initrd/* $TARGET/initrd/
+	umount /tmp/terraform/mount-initrd
+	rm /tmp/terraform/initrd
+	rm -R /tmp/terraform/mount-initrd
+
+	#----------------------------------------------------------------#
+	# copy stuff from packages that came off the cd
+	#----------------------------------------------------------------#
+	
+	echo "extracting packages"
+	
+	# make a teraform deb temp dir
+	mkdir /tmp/terraform/deb
+	
+	# find our kernel version
+	KERNEL=`ls $TARGET/initrd/lib/modules/`
+
+	# we need to be in the temp deb dir
+	cd /tmp/terraform/deb/
+
+	# make some mod dirs
+	mkdir $TARGET/initrd-mod/sbin
+	mkdir $TARGET/initrd-mod/lib
+	mkdir -p $TARGET/initrd-mod/usr/bin
+	mkdir -p $TARGET/initrd-mod/usr/sbin
+	mkdir -p $TARGET/initrd-mod/usr/lib
+	mkdir -p $TARGET/initrd-mod/lib/modules/$KERNEL/kernel/drivers/md
+	mkdir -p $TARGET/initrd-mod/lib/modules/$KERNEL/kernel/fs/reiserfs/
+	mkdir -p $TARGET/initrd-mod/lib/modules/$KERNEL/kernel/fs/ext3/
+	#mkdir -p $TARGET/initrd-mod/lib/modules/*/kernel/fs/ext2/
+		
+	# sfdisk
+	ar -x $TARGET/cd/pool/main/u/util-linux/util-linux*.deb
+	tar -zxf data.tar.gz
+	cp sbin/sfdisk $TARGET/initrd-mod/sbin/
+	rm -R /tmp/terraform/deb/*
+
+	# libc.so.6
+	# this is needed for sfdisk
+	# libc6 is in main/g/glibc/ ... where else would it be ??
+	ar -x $TARGET/cd/pool/main/g/glibc/libc6_*.deb
+	tar -zxf data.tar.gz
+	cp lib/libc-*.so $TARGET/initrd-mod/lib/libc.so.6
+	rm -R /tmp/terraform/deb/*
+		
+	# raid mdadm
+	ar -x $TARGET/cd/pool/main/m/mdadm/mdadm*.deb
+	tar -zxf data.tar.gz
+	cp sbin/md* $TARGET/initrd-mod/sbin/
+	rm -R /tmp/terraform/deb/*
+		
+	# raid drivers
+	# this will work for warty
+	ar -x $TARGET/cd/pool/main/l/linux-kernel-di*/md*.udeb
+	# this will work for hoary
+	ar -x $TARGET/cd/pool/main/l/linux-source*/md*.udeb
+	tar -zxf data.tar.gz
+	cp -R lib/modules/$KERNEL/kernel/drivers/md/* $TARGET/initrd-mod/lib/modules/$KERNEL/kernel/drivers/md/
+	rm -R /tmp/terraform/deb/*
+		
+	# it would be nice if we could make filesystems (let's do something about that now)
+	
+	# ext2
+	ar -x $TARGET/cd/pool/main/e/e2fsprogs/e2fsprogs_*.deb
+	tar -zxf data.tar.gz
+	ar -x $TARGET/cd/pool/main/e/e2fsprogs/e2fslibs_*.deb
+	tar -zxf data.tar.gz
+	ar -x $TARGET/cd/pool/main/e/e2fsprogs/libcomerr*.deb
+	tar -zxf data.tar.gz
+	ar -x $TARGET/cd/pool/main/e/e2fsprogs/libss*.deb
+	tar -zxf data.tar.gz
+	ar -x $TARGET/cd/pool/main/e/e2fsprogs/libblk*.deb
+	tar -zxf data.tar.gz
+	ar -x $TARGET/cd/pool/main/e/e2fsprogs/libcomerr*.deb
+	tar -zxf data.tar.gz
+	ar -x $TARGET/cd/pool/main/e/e2fsprogs/libuuid*.deb
+	tar -zxf data.tar.gz
+	cp sbin/mke2fs $TARGET/initrd-mod/sbin/
+	cp lib/libext2fs.so.2.* $TARGET/initrd-mod/lib/libext2fs.so.2
+	cp lib/libcom_err.so.2.* $TARGET/initrd-mod/lib/libcom_err.so.2
+	cp lib/libe2p.so.2.* $TARGET/initrd-mod/lib/libe2p.so.2
+	cp lib/libss.so.2.* $TARGET/initrd-mod/lib/libss.so.2
+	cp lib/libblkid.so.1.* $TARGET/initrd-mod/lib/libblkid.so.1
+	cp lib/libuuid.so.1.* $TARGET/initrd-mod/lib/libuuid.so.1
+	rm -R /tmp/terraform/deb/*
+		
+	# ext2 drivers
+	# this will work for warty
+	ar -x $TARGET/cd/pool/main/l/linux-kernel-di*/ext3*.udeb 
+	# this will work for hoary
+	ar -x $TARGET/cd/pool/main/l/linux-source*/ext3*.udeb 
+	tar -zxf data.tar.gz
+	cp lib/modules/$KERNEL/kernel/fs/ext3/* $TARGET/initrd-mod/lib/modules/$KERNEL/kernel/fs/ext3/
+	#cp /lib/modules/*/kernel/fs/ext2/* $TARGET/initrd-mod/lib/modules/*/kernel/fs/ext2/
+	rm -R /tmp/terraform/deb/*
+		
+	# reiserfs
+	ar -x $TARGET/cd/pool/main/r/reiserfsprogs/reiserfsprogs*.deb
+	tar -zxf data.tar.gz
+	# this will work for warty
+	ar -x $TARGET/cd/pool/main/l/linux-kernel-di*/reiserfs*.udeb
+	# this will work for hoary
+	ar -x $TARGET/cd/pool/main/l/linux-source*/reiserfs*.udeb 
+	tar -zxf data.tar.gz
+	cp sbin/mkreiserfs $TARGET/initrd-mod/sbin/
+	cp lib/modules/$KERNEL/kernel/fs/reiserfs/* $TARGET/initrd-mod/lib/modules/$KERNEL/kernel/fs/reiserfs/
+	rm -R /tmp/terraform/deb/*
+
+	# the things we need to do just to clear the screen !
+	ar -x $TARGET/cd/pool/main/n/ncurses/ncurses-bin*.deb
+	tar -zxf data.tar.gz
+	ar -x $TARGET/cd/pool/main/n/ncurses/libncurses5*.deb
+	tar -zxf data.tar.gz
+	cp usr/bin/clear $TARGET/initrd-mod/usr/bin/
+	cp lib/libncurses.so.5.* $TARGET/initrd-mod/lib/libncurses.so.5
+
+	# debootstrap
+	ar -x $TARGET/cd/pool/main/d/debootstrap/debootstrap*.udeb
+	tar -zxf data.tar.gz
+	cp usr/sbin/debootstrap $TARGET/initrd-mod/usr/sbin/
+	cp -R usr/lib/debootstrap $TARGET/initrd-mod/usr/lib/
+
+	# clean up
+	cd $TARGET
+	rm -R /tmp/terraform/deb
+
+	#----------------------------------------------------------------#
+	# copy stuff from the Terraform base dir
+	#----------------------------------------------------------------#	
+
+	# cd-mod
+	cp -Rp $BASEDIR/cd-mod/* $TARGET/cd-mod/
+	
+	# initrd-mod
+	cp -Rp $BASEDIR/initrd-mod/* $TARGET/initrd-mod/
+	
+	# system-mod
+	cp -Rp $BASEDIR/system-mod/* $TARGET/system-mod/
+	
+	# terraform install scripts
+	cp -Rp $BASEDIR/terraform/* $TARGET/terraform/
+
+	# cleanup
+	rm -R /tmp/terraform
+
+	# finished
+	echo ""
+	echo ""
+	echo "Terraform ISO source built at $TARGET"
+	echo ""

@@ -1,0 +1,8 @@
+#!/bin/sh
+
+echo ""
+echo "  Terraform install CD not found !"
+echo ""  
+echo "  mount the Terraform install CD at /cdrom and try again."
+echo ""
+

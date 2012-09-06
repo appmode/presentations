@@ -1,0 +1,123 @@
+Instructions for using the Terraform system
+
+## ------------------------------- ##
+## Build a custom Install CD
+## ------------------------------- ##
+
+1) You will need a Debian based Install CD to do use as a base.
+	Terraform has been tested and works with Ubuntu (Warty & Hoary) CDs
+
+2) install the Terraform system
+	mkdir /usr/share/terraform
+	cd /usr/share/terraform
+	tar -zxvf terraform
+or
+	apt-get install terraform
+
+3) build a Terraform ISO source
+	Insert the Debian/Ubuntu CD and mount it
+	make-terraform
+
+3) stick your install scripts into the apropriate directories
+	install-cd/terraform/pre is for scripts to run before the install
+	install-cd/terraform/post is for scripts to run after the install
+	install-cd/terraform/post-reboot is for scripts to run once after the first reboot
+
+4) Add any modified or extra files
+	install-cd/cd-mod is for files to go in the root of the CD
+	install-cd/initrd-mod is for files to go in the initrd
+	install-cd/system-mod is for files to go in the installed system
+	
+5) Do not edit anything in install-cd/initrd or install-cd/cd
+	if you need to edit one of these files you should copy it to the apropriate
+	mod directory and edit it there (see step 4)
+	
+6) Make an ISO
+	make-iso
+
+7) Burn a CD from the ISO
+
+## ------------------------------- ##
+## How building an ISO works
+## ------------------------------- ##
+
+Have a look at the make-iso script, there are loads of comments and it should not
+be to hard to follow what is going on.
+
+The basics of building an ISO are;
+
+1) Copy the base of the install CD
+	everything in install-cd/cd is copied to the cd-temp dir
+	this forms the base of the install CD
+
+2) Remove unwanted files
+	Some unneeded files in the cd-temp dir are removed
+
+3) Copy modifications to the base of the install CD
+	anything in install-cd/cd-mod is copied over the top of the cd-temp dir
+	existing files with matching names will be overwritten
+
+4) Copy the base of the initrd
+	everything from install-cd/initrd is copied to the initrd-temp dir
+	this forms the base of the initrd
+
+5) Copy modifications to the initrd
+	anything from install-cd/initrd-mod is copied over the top of the initrd-temp dir
+	existing files with matching names will be overwritten
+
+6) Copy the install scripts
+	everything from install-cd/terraform is copied into the cd-temp dir
+	this includes the Terraform installer and your custom install scripts
+
+7) Copy the system modifications
+	anything from install-cd/system-mod is copied into the terraform directory in the cd-temp dir
+	these files will be copied onto the installed system.
+
+8) Compress the initrd
+	compress the contents of the initrd-temp dir
+	copy the compressed initrd into the cd-temp dir
+
+9) Make an ISO
+
+## ------------------------------- ##
+## Terraform Directories
+## ------------------------------- ##
+
+install-cd/cd-mod
+	files in this directory will be copied onto the install CD. Files of the same
+	name in the same location will be overwritten. If you wanted to add a file 
+	'/install/install.txt' to the CD you would put the file in 
+	'install-cd/cd-mod/install/install.txt'
+
+install-cd/initrd-mod
+	files in this directory will be copied into the compressed initrd. Files
+	of the same name in the same location will be overwritten. If you wanted to 
+	add a file '/bin/sh' to the initrd you would put the file in 
+	'install-cd/initrd-mod/bin/sh'	
+	
+install-cd/system-mod
+	files in this directory will be copied onto the newly installed sytem. Files
+	of the same name in the same location will be overwritten. If you wanted to 
+	add a file '/bin/sh' to the installed system you would put the file in 
+	'install-cd/system-mod/bin/sh'	
+
+install-cd/terraform/pre
+	scripts in this directory will be run before the Terraform installer is run.
+	at this point the install CD is mounted at /cdrom , RAID arrays have NOT been
+	build and the hard drives have NOT been formated or mounted.
+
+install-cd/terraform/post
+	scripts in this directory will be run after the Terraform installer has finished.
+	at this point the install CD is mounted at /cdrom and /target/cdrom . the newly
+	installed system is mounted at /target .	
+	
+install-cd/terraform/post-reboot
+	scripts in this directory will be copied onto the installed system in /etc/rcS_firstboot/
+	and will be run once, the first time the newly installed system reboots. the
+	scripts in this directory should be written as if they were running on a normal
+	fully installed system. The scripts will not have access to files on the install
+	CD as it will not be mounted.
+	
+## ------------------------------- ##
+## How the Terraform Installer Works
+## ------------------------------- ##
